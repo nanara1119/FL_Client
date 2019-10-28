@@ -7,6 +7,8 @@ import numpy as np
 import requests
 import tensorflow as tf
 import pandas as pd
+import numpy_encoder
+import base64
 
 # %%
 '''
@@ -138,12 +140,13 @@ def train_local(model):
     print("train local")
 
 # %%
+
 def update_local_weight(weight):
-    print("update local weight start")
-    local_weight_to_json = pd.Series(weight).to_json(orient='values')
-    #local_weight_to_json = json.dumps(weight)
+    print("update local weight start : ", type(weight), len(weight), len(weight[0]), type(weight[0]), len(weight[1]), type(weight[1]))
+
+    local_weight_to_json = json.dumps(weight, cls=numpy_encoder.NumpyEncoder)
     result = requests.put(ip_address, data=local_weight_to_json)
-    print(result)
+    #print(result)
     print("update local weight end")
 
     '''
@@ -153,6 +156,7 @@ def update_local_weight(weight):
 
 
 # %%
+
 def task():
     print("task start")
 
@@ -161,8 +165,8 @@ def task():
     model.fit(td, tl, 10, 10, 0)
     test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
     print("acc : {}, loss : {}".format(test_acc, test_loss))
-
-    for i in range(1) :
+    print("model weight len : ", len(model.get_weights()), type(model.get_weights()),len(model.get_weights()[0]), len(model.get_weights()[1]))
+    for i in range(10) :
         update_local_weight(model.get_weights())
     '''
     if check_local_global_weight():
@@ -179,9 +183,8 @@ def task():
     '''
     print("end task")
 
-
-# %%
-
+    #global_weight = get_global_weight()
+    #print("get global weight : ", len(global_weight), len(global_weight[0]), len(global_weight[1]))
 
 # %%
 '''
@@ -212,6 +215,7 @@ if __name__ == "__main__":
     #before_local_weight = []
     #get_global_weight()
     task()
+
 
 
 
