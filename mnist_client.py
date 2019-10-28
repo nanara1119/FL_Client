@@ -109,8 +109,6 @@ def run_federated():
             model.set_weights(global_weight)
 
 
-
-
     print("fl end")
 
 
@@ -118,12 +116,12 @@ def run_federated():
 def check_local_global_weight():
     global_weight = get_global_weight()
     global before_local_weight
-    print("check local & global weight : {} /// {}".format(global_weight, before_local_weight))
+
 
     if global_weight == before_local_weight:
-        print("aaaaaaaa")
+        print("global weight == before local weight")
     else:
-        print("bbbbbbbb")
+        print("global weight != before local weight")
 
     before_local_weight = global_weight
 
@@ -142,11 +140,11 @@ def train_local(model):
 # %%
 
 def update_local_weight(weight):
-    print("update local weight start : ", type(weight), len(weight), len(weight[0]), type(weight[0]), len(weight[1]), type(weight[1]))
+    print("update local weight start ")
 
     local_weight_to_json = json.dumps(weight, cls=numpy_encoder.NumpyEncoder)
     result = requests.put(ip_address, data=local_weight_to_json)
-    #print(result)
+
     print("update local weight end")
 
     '''
@@ -165,9 +163,11 @@ def task():
     model.fit(td, tl, 10, 10, 0)
     test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
     print("acc : {}, loss : {}".format(test_acc, test_loss))
-    print("model weight len : ", len(model.get_weights()), type(model.get_weights()),len(model.get_weights()[0]), len(model.get_weights()[1]))
     for i in range(10) :
         update_local_weight(model.get_weights())
+
+    global lw
+    lw = model.get_weights()
     '''
     if check_local_global_weight():
         train_local(None)
@@ -183,19 +183,26 @@ def task():
     '''
     print("end task")
 
-    #global_weight = get_global_weight()
-    #print("get global weight : ", len(global_weight), len(global_weight[0]), len(global_weight[1]))
+    global gw
+    gw = get_global_weight()
+
 
 # %%
 '''
     get global_weight from server
-'''
+''' 
 def get_global_weight():
     result = requests.get(ip_address)
-    global_weight = result.json()
+    result_data = result.json()
+    global_weight = []
     #   Server에 global weight가 저장되어 있지 않는 경우
-    if len(global_weight) == 0:
+    if len(result_data) == 0:
         global_weight = None
+
+    for i in range(len(result_data)):
+        temp = np.array(result_data[i], dtype=np.float32)
+        global_weight.append(temp)
+
     return global_weight
 
 
@@ -203,7 +210,10 @@ def get_global_weight():
 
 
 # %%
+
 before_local_weight = []
+gw = []
+lw = []
 
 if __name__ == "__main__":
 
@@ -211,6 +221,7 @@ if __name__ == "__main__":
     current_round = 0
     number_round = 100
     ip_address = "http://127.0.0.1:8000/weight"
+
 
     #before_local_weight = []
     #get_global_weight()
