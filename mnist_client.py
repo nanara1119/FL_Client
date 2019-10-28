@@ -1,5 +1,6 @@
 # %%
 # import
+import argparse
 import json
 import threading
 
@@ -157,9 +158,9 @@ def update_local_weight(weight):
 
 def task():
     print("task start")
-
     model = build_nn_model()
-    td, tl = make_split_train_data_by_number(0, size=1000)
+    global input_number
+    td, tl = make_split_train_data_by_number(input_number, size=1000)
     model.fit(td, tl, 10, 10, 0)
     test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
     print("acc : {}, loss : {}".format(test_acc, test_loss))
@@ -190,7 +191,7 @@ def task():
 # %%
 '''
     get global_weight from server
-''' 
+'''
 def get_global_weight():
     result = requests.get(ip_address)
     result_data = result.json()
@@ -214,8 +215,17 @@ def get_global_weight():
 before_local_weight = []
 gw = []
 lw = []
+input_number = 0
 
 if __name__ == "__main__":
+
+    parameter = argparse.ArgumentParser()
+    parameter.add_argument("number", default=0)
+    args = parameter.parse_args()
+
+    input_number = int(args.number)
+
+    print("args : {}".format(input_number))
 
     index = 0
     current_round = 0
