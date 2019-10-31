@@ -8,3 +8,4 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(o, np.ndarray):
             return o.tolist()
         return json.JSONEncoder.default(self, o)
+

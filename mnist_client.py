@@ -8,8 +8,17 @@ import numpy as np
 import requests
 import tensorflow as tf
 import pandas as pd
+from sklearn.metrics import confusion_matrix, accuracy_score
+
 import numpy_encoder
 import base64
+
+'''
+    https://www.tensorflow.org/guide/gpu?hl=ko
+'''
+gpus = tf.config.experimental.list_physical_devices('GPU')
+tf.config.experimental.set_virtual_device_configuration(gpus[0],
+                                                        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=512)])
 
 # %%
 '''
@@ -84,14 +93,18 @@ def build_cnn_model():
 
 # %%
 def make_split_train_data_by_number(index_number, size=600):
-    random_index = np.random.randint(0, high=len(train_index_list[index_number]), size=size)
 
-    s_train_image = []
-    s_train_label = []
-    for v in random_index:
-        s_train_image.append(train_images[train_index_list[index_number][v]])
-        s_train_label.append(train_labels[train_index_list[index_number][v]])
-    return np.array(s_train_image), np.array(s_train_label)
+    if index_number != -1 :
+        random_index = np.random.randint(0, high=len(train_index_list[index_number]), size=size)
+
+        s_train_image = []
+        s_train_label = []
+        for v in random_index:
+            s_train_image.append(train_images[train_index_list[index_number][v]])
+            s_train_label.append(train_labels[train_index_list[index_number][v]])
+        return np.array(s_train_image), np.array(s_train_label)
+    else:
+        return train_images, train_labels
 
 # %%
 '''
@@ -144,7 +157,7 @@ def update_local_weight(weight):
     print("update local weight start ")
 
     local_weight_to_json = json.dumps(weight, cls=numpy_encoder.NumpyEncoder)
-    result = requests.put(ip_address, data=local_weight_to_json)
+    requests.put(ip_address, data=local_weight_to_json)
 
     print("update local weight end")
 
@@ -160,15 +173,15 @@ def task():
     print("task start")
     model = build_nn_model()
     global input_number
+
     td, tl = make_split_train_data_by_number(input_number, size=1000)
+
     model.fit(td, tl, 10, 10, 0)
     test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
     print("acc : {}, loss : {}".format(test_acc, test_loss))
-    for i in range(10) :
-        update_local_weight(model.get_weights())
 
-    global lw
-    lw = model.get_weights()
+    update_local_weight(model.get_weights())
+
     '''
     if check_local_global_weight():
         train_local(None)
@@ -184,8 +197,27 @@ def task():
     '''
     print("end task")
 
+    test()
+
+# %%
+def test():
+    print("test start")
     global gw
     gw = get_global_weight()
+
+    if gw is not None:
+        model = build_nn_model()
+        model.set_weights(gw)
+
+        result = model.predict(test_images)
+        result = np.argmax(result, axis=1)
+
+        print("test end")
+
+        cm = confusion_matrix(test_labels, result)
+        print(cm)
+        acc = accuracy_score(test_labels, result)
+        print("acc : {}".format(acc))
 
 
 # %%
@@ -195,18 +227,25 @@ def task():
 def get_global_weight():
     result = requests.get(ip_address)
     result_data = result.json()
-    global_weight = []
+    global_weight = None
     #   Server에 global weight가 저장되어 있지 않는 경우
-    if len(result_data) == 0:
-        global_weight = None
-
-    for i in range(len(result_data)):
-        temp = np.array(result_data[i], dtype=np.float32)
-        global_weight.append(temp)
+    if result_data is not None:
+        global_weight = []
+        for i in range(len(result_data)):
+            temp = np.array(result_data[i], dtype=np.float32)
+            global_weight.append(temp)
 
     return global_weight
 
-
+# %%
+def make_split_train_data(size=600):
+    random_index = np.random.randint(0, high=len(train_labels), size=size)
+    s_train_image = []
+    s_train_label = []
+    for v in random_index:
+        s_train_image.append(train_images[v])
+        s_train_label.append(train_labels[v])
+    return np.array(s_train_image), np.array(s_train_label)
 
 
 
