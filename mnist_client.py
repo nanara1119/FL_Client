@@ -116,29 +116,34 @@ def make_split_train_data(size=600):
 
 # %%
 '''
-    get global_weight from server
+    request global_weight from server
 '''
-def get_global_weight():
+def request_global_weight():
+    print("request_global_weight start")
     result = requests.get(ip_address)
     result_data = result.json()
+
+    global global_weight
     global_weight = None
-    #   Server에 global weight가 저장되어 있지 않는 경우
+
+    #   Server에 global weight가 저장되어 있는 경우
     if result_data is not None:
         global_weight = []
         for i in range(len(result_data)):
             temp = np.array(result_data[i], dtype=np.float32)
             global_weight.append(temp)
 
-    return global_weight
+    print("request_global_weight end")
+
 
 # %%
 '''
     update local weight to server
 '''
-def update_local_weight(weight):
+def update_local_weight():
     print("update local weight start ")
-
-    local_weight_to_json = json.dumps(weight, cls=numpy_encoder.NumpyEncoder)
+    global before_local_weight
+    local_weight_to_json = json.dumps(before_local_weight, cls=numpy_encoder.NumpyEncoder)
     requests.put(ip_address, data=local_weight_to_json)
 
     print("update local weight end")
@@ -148,92 +153,130 @@ def update_local_weight(weight):
     '''
 
 # %%
-'''
-    Federated Learning 
-'''
-def run_federated():
-    print("fl start")
+def compare_global_local_weight():
+    print("compare_global_local_weight start")
 
-    for i in range(max_round) :
-        #model = build_cnn_model()
-        model = build_nn_model()
-        global_weight = get_global_weight()
-
-        if global_weight is not None:
-            model.set_weights(global_weight)
-
-
-    print("fl end")
-
-
-# %%
-def check_local_global_weight():
-    global_weight = get_global_weight()
-
+    status = False
+    global global_weight
     global before_local_weight
-
-    if global_weight == before_local_weight:
-        print("global weight == before local weight")
-    else:
-        print("global weight != before local weight")
-
-    before_local_weight = global_weight
 
     '''
         global weight와 before local weight 비교 함
         같은 경우 일정 시간 이후 다시 check_local_global_weight 수행
         다른 경우 train_local 수행
     '''
-    return False
+    # 초기 상태이면 pass
+    if global_weight is None or len(before_local_weight) == 0:
+        print("before_local_weight None")
+        return True
 
+    global_np_weight = np.array(global_weight)
+    local_np_weight = np.array(before_local_weight)
+    compare_weight = global_np_weight - local_np_weight
+
+    print("comapre_wiehgt : ", compare_weight)
+
+    if compare_weight != 0:
+        print("global weight == before local weight")
+    else:
+        before_local_weight = global_weight
+        print("global weight != before local weight")
+        status = True
+
+    print("compare_global_local_weight end")
+    return status
 
 # %%
-def train_local(model):
-    print("train local")
+def train_validation_local():
+    print("train local start")
 
+    global before_local_weight
+    global validation_acc_list
+    global validation_loss_list
+    global validation_time_list
+    global input_number
+    global global_weight
+    local_start_time = datetime.now()
+
+    td, tl = make_split_train_data_by_number(input_number, size=1000)
+
+    model = build_nn_model()
+
+    if global_weight is not None:
+        model.set_weights(global_weight)
+    model.fit(td, tl, epochs=10, batch_size=10, verbose=0)
+    test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
+
+    before_local_weight = model.get_weights()
+
+    validation_acc_list.append(test_acc)
+    validation_loss_list.append(test_loss)
+    validation_time_list.append(datetime.now() - local_start_time)
+
+    print("train local end")
+
+# %%
+def delay_compare_weight():
+    '''
+            일정 시간 이후 task 재 호출
+    '''
+    global current_round
+    if current_round is not max_round:
+        threading.Timer(5, task).start()
+    else:
+        print_result()
 
 
 # %%
 
 def task():
-    print("task start")
-    model = build_nn_model()
-    global input_number
-
-    td, tl = make_split_train_data_by_number(input_number, size=1000)
-
-    local_result = model.fit(td, tl, epochs=10, batch_size=10, verbose=0)
-    test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
-
-    local_time = datetime.now()
-
-    print("acc : {}, loss : {}".format(test_acc, test_loss))
-
-    for i in range(10):
-        update_local_weight(model.get_weights())
-
+    print("--------------------")
+    global current_round
+    print("task start : ", current_round)
     '''
-    if check_local_global_weight():
-        train_local(None)
-        update_local_weight(None)
+        1. global weight request
+        2. global weight & local weight 비교
+        3. start learning & validation 진행             
+        5. global weight update
+        6. delay 10, next round
     '''
+    request_global_weight()
+    #status = compare_global_local_weight()
+    status = True
 
-    '''
-        일정 시간 이후 task 재 호출
-    '''
-    '''
-    if current_round is not number_round:
-        threading.Timer(10, task).start()
-    '''
+    if status:
+        # 다음 단계 진행
+        train_validation_local()
+        update_local_weight()
+
+        current_round += 1
+        delay_compare_weight()
+        print("train")
+    else:
+        # 10초 후 재 시도
+        delay_compare_weight()
+        print("retry ")
+
     print("end task")
+    print("====================")
 
-    test()
+# %%
+def print_result():
+    global start_time
+    global validation_acc_list
+    global validation_loss_list
+    global validation_time_list
+
+    print("time : {}".format(datetime.now() - start_time))
+    print("acc list", validation_acc_list)
+    print("loss list", validation_loss_list)
+    print("time list", validation_time_list)
 
 # %%
 def test():
     print("test start")
     global gw
-    gw = get_global_weight()
+    gw = request_global_weight()
 
     if gw is not None:
         model = build_nn_model()
@@ -250,20 +293,9 @@ def test():
         print("acc : {}".format(acc))
 
 
-# %%
-def task_val():
-    print("task_val")
 
 
 # %%
-
-before_local_weight = []
-gw = []
-input_number = 0
-
-validation_acc_list = []
-validation_time_list = []
-
 
 if __name__ == "__main__":
 
@@ -277,7 +309,15 @@ if __name__ == "__main__":
 
     index = 0
     current_round = 0
-    max_round = 100
+    max_round = 15
+
+    before_local_weight = []
+
+    global_weight = []
+    validation_acc_list = []
+    validation_loss_list = []
+    validation_time_list = []
+
 
     #aws_url = "http://FlServer-env.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com/weight"
     #ip_address = aws_url
@@ -286,14 +326,6 @@ if __name__ == "__main__":
     start_time = datetime.now()
     task()
 
-
-    # validation 진행
-    if input_number == 0 :
-        task_val()
-
-    end_time = datetime.now()
-
-    print("time : {}".format(end_time - start_time))
 
 
 
