@@ -11,7 +11,7 @@ import pandas as pd
 from sklearn.metrics import confusion_matrix, accuracy_score
 
 import numpy_encoder
-from datetime import datetime
+import time
 import base64
 
 '''
@@ -198,7 +198,7 @@ def train_validation_local(global_weight = None):
     #global global_weight
     #global local_weight
 
-    local_start_time = datetime.now()
+    local_start_time = time.time()
 
     td, tl = make_split_train_data_by_number(input_number, size=1000)
 
@@ -207,15 +207,15 @@ def train_validation_local(global_weight = None):
     if global_weight is not None:
         model.set_weights(global_weight)
         #rint("set global weight ok")
-        print("set global round : {}".format(global_weight))
-    model.fit(td, tl, epochs=10, batch_size=10, verbose=0)
-    #test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
+        #print("set global round : {}".format(global_weight))
+    model.fit(td, tl, epochs=5, batch_size=10, verbose=0)
+    test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
 
     local_weight = model.get_weights()
 
-    #validation_acc_list.append(test_acc)
-    #validation_loss_list.append(test_loss)
-    validation_time_list.append(datetime.now() - local_start_time)
+    validation_acc_list.append(test_acc)
+    validation_loss_list.append(test_loss)
+    validation_time_list.append(time.time() - local_start_time)
 
     print("train local end")
     return local_weight
@@ -268,30 +268,27 @@ def task():
         2. global weight & local weight 비교
         3. start learning & validation 진행             
         5. global weight update
-        6. delay 10, next round
+        6. delay, next round
     '''
     global current_round
 
     global_round = request_current_round()
-    #current_round = global_round
     print("global round : {}, local round :{}".format(global_round, current_round))
-
-
 
     if global_round == current_round:
         print("task train")
         # 다음 단계 진행
         global_weight = request_global_weight()
         local_weight = train_validation_local(global_weight)
-        validation(local_weight)
+        #validation(local_weight)
         update_local_weight(local_weight)
-        #delay_compare_weight()
+        delay_compare_weight()
         current_round += 1
 
     else:
         print("task retry")
         # 10초 후 재 시도
-        #delay_compare_weight()
+        delay_compare_weight()
 
     print("end task")
     print("====================")
@@ -303,7 +300,8 @@ def print_result():
     global validation_loss_list
     global validation_time_list
 
-    print("time : {}".format(datetime.now() - start_time))
+    print("number : {}".format(input_number))
+    print("time : {}".format(time.time() - start_time))
     print("acc list", validation_acc_list)
     print("loss list", validation_loss_list)
     print("time list", validation_time_list)
@@ -328,9 +326,6 @@ def test():
         acc = accuracy_score(test_labels, result)
         print("acc : {}".format(acc))
 
-
-
-
 # %%
 #global_weight = []
 
@@ -344,14 +339,13 @@ if __name__ == "__main__":
 
     print("args : {}".format(input_number))
 
-    max_round = 10
+    max_round = 100
     global_round = 0
-    delay_time = 15
-    current_round = 1
+    delay_time = 10
+    current_round = 0
 
     #local_model = None
     #local_weight = []
-
 
     validation_acc_list = []
     validation_loss_list = []
@@ -363,7 +357,7 @@ if __name__ == "__main__":
     ip_address = "http://127.0.0.1:8000/weight"
     request_round = "http://127.0.0.1:8000/round"
 
-    start_time = datetime.now()
+    start_time = time.time()
     task()
 
 
