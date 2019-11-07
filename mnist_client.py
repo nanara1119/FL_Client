@@ -19,7 +19,7 @@ import base64
 '''
 gpus = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_virtual_device_configuration(gpus[0],
-                                                        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=512)])
+                                                        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=256)])
 
 # %%
 '''
@@ -123,7 +123,8 @@ def request_global_weight():
     result = requests.get(ip_address)
     result_data = result.json()
 
-    global global_weight
+    #global global_weight
+    #global_weight = None
     global_weight = None
 
     #   Server에 global weight가 저장되어 있는 경우
@@ -135,22 +136,21 @@ def request_global_weight():
 
     print("request_global_weight end")
 
+    return global_weight
+
 
 # %%
 '''
     update local weight to server
 '''
-def update_local_weight():
+def update_local_weight(local_weight = []):
     print("update local weight start ")
-    global before_local_weight
-    local_weight_to_json = json.dumps(before_local_weight, cls=numpy_encoder.NumpyEncoder)
+
+    local_weight_to_json = json.dumps(local_weight, cls=numpy_encoder.NumpyEncoder)
     requests.put(ip_address, data=local_weight_to_json)
 
     print("update local weight end")
 
-    '''
-        weight update는 실패가 없다고 가정 ... 
-    '''
 
 # %%
 def compare_global_local_weight():
@@ -187,15 +187,17 @@ def compare_global_local_weight():
     return status
 
 # %%
-def train_validation_local():
+def train_validation_local(global_weight = None):
     print("train local start")
 
-    global before_local_weight
-    global validation_acc_list
-    global validation_loss_list
-    global validation_time_list
-    global input_number
-    global global_weight
+    #global before_local_weight
+    #global validation_acc_list
+    #global validation_loss_list
+    #global validation_time_list
+    #global input_number
+    #global global_weight
+    #global local_weight
+
     local_start_time = datetime.now()
 
     td, tl = make_split_train_data_by_number(input_number, size=1000)
@@ -204,35 +206,63 @@ def train_validation_local():
 
     if global_weight is not None:
         model.set_weights(global_weight)
+        #rint("set global weight ok")
+        print("set global round : {}".format(global_weight))
     model.fit(td, tl, epochs=10, batch_size=10, verbose=0)
-    test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
+    #test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
 
-    before_local_weight = model.get_weights()
+    local_weight = model.get_weights()
 
-    validation_acc_list.append(test_acc)
-    validation_loss_list.append(test_loss)
+    #validation_acc_list.append(test_acc)
+    #validation_loss_list.append(test_loss)
     validation_time_list.append(datetime.now() - local_start_time)
 
     print("train local end")
+    return local_weight
 
 # %%
 def delay_compare_weight():
     '''
             일정 시간 이후 task 재 호출
     '''
-    global current_round
     if current_round is not max_round:
-        threading.Timer(5, task).start()
+        threading.Timer(delay_time, task).start()
     else:
         print_result()
 
+# %%
+def request_current_round():
+    result = requests.get(request_round)
+    result_data = result.json()
+
+    return result_data
+    '''
+    global global_round
+    global_round = result_data
+    #print("request_current_round : ", result_data)
+    '''
+
+# %%
+def validation(local_weight = []):
+    model = build_nn_model()
+    model.set_weights(local_weight)
+
+    result = model.predict(test_images)
+    result = np.argmax(result, axis=1)
+
+    #print("test end")
+
+    #cm = confusion_matrix(test_labels, result)
+    #print(cm)
+    acc = accuracy_score(test_labels, result)
+    print("acc : {}".format(acc))
+    validation_acc_list.append(acc)
+    #validation_loss_list.append(test_loss)
 
 # %%
 
 def task():
     print("--------------------")
-    global current_round
-    print("task start : ", current_round)
     '''
         1. global weight request
         2. global weight & local weight 비교
@@ -240,22 +270,28 @@ def task():
         5. global weight update
         6. delay 10, next round
     '''
-    request_global_weight()
-    #status = compare_global_local_weight()
-    status = True
+    global current_round
 
-    if status:
+    global_round = request_current_round()
+    #current_round = global_round
+    print("global round : {}, local round :{}".format(global_round, current_round))
+
+
+
+    if global_round == current_round:
+        print("task train")
         # 다음 단계 진행
-        train_validation_local()
-        update_local_weight()
-
+        global_weight = request_global_weight()
+        local_weight = train_validation_local(global_weight)
+        validation(local_weight)
+        update_local_weight(local_weight)
+        #delay_compare_weight()
         current_round += 1
-        delay_compare_weight()
-        print("train")
+
     else:
+        print("task retry")
         # 10초 후 재 시도
-        delay_compare_weight()
-        print("retry ")
+        #delay_compare_weight()
 
     print("end task")
     print("====================")
@@ -296,6 +332,7 @@ def test():
 
 
 # %%
+#global_weight = []
 
 if __name__ == "__main__":
 
@@ -307,21 +344,24 @@ if __name__ == "__main__":
 
     print("args : {}".format(input_number))
 
-    index = 0
-    current_round = 0
-    max_round = 15
+    max_round = 10
+    global_round = 0
+    delay_time = 15
+    current_round = 1
 
-    before_local_weight = []
+    #local_model = None
+    #local_weight = []
 
-    global_weight = []
+
     validation_acc_list = []
     validation_loss_list = []
     validation_time_list = []
 
-
+    base_url = "http://127.0.0.1:8080/"
     #aws_url = "http://FlServer-env.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com/weight"
     #ip_address = aws_url
     ip_address = "http://127.0.0.1:8000/weight"
+    request_round = "http://127.0.0.1:8000/round"
 
     start_time = datetime.now()
     task()
