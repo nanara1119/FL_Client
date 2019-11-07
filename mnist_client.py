@@ -11,6 +11,7 @@ import pandas as pd
 from sklearn.metrics import confusion_matrix, accuracy_score
 
 import numpy_encoder
+from datetime import datetime
 import base64
 
 '''
@@ -51,8 +52,6 @@ for i, v in enumerate(test_labels):
 '''
     nn model build
 '''
-
-
 def build_nn_model():
     model = tf.keras.models.Sequential([
         tf.keras.layers.Flatten(input_shape=(28, 28)),
@@ -71,8 +70,6 @@ def build_nn_model():
 '''
     cnn model build
 '''
-
-
 def build_cnn_model():
     model = tf.keras.models.Sequential([
         tf.keras.layers.Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=(28, 28, 1)),
@@ -107,14 +104,57 @@ def make_split_train_data_by_number(index_number, size=600):
         return train_images, train_labels
 
 # %%
+def make_split_train_data(size=600):
+    random_index = np.random.randint(0, high=len(train_labels), size=size)
+    s_train_image = []
+    s_train_label = []
+    for v in random_index:
+        s_train_image.append(train_images[v])
+        s_train_label.append(train_labels[v])
+    return np.array(s_train_image), np.array(s_train_label)
+
+
+# %%
+'''
+    get global_weight from server
+'''
+def get_global_weight():
+    result = requests.get(ip_address)
+    result_data = result.json()
+    global_weight = None
+    #   Server에 global weight가 저장되어 있지 않는 경우
+    if result_data is not None:
+        global_weight = []
+        for i in range(len(result_data)):
+            temp = np.array(result_data[i], dtype=np.float32)
+            global_weight.append(temp)
+
+    return global_weight
+
+# %%
+'''
+    update local weight to server
+'''
+def update_local_weight(weight):
+    print("update local weight start ")
+
+    local_weight_to_json = json.dumps(weight, cls=numpy_encoder.NumpyEncoder)
+    requests.put(ip_address, data=local_weight_to_json)
+
+    print("update local weight end")
+
+    '''
+        weight update는 실패가 없다고 가정 ... 
+    '''
+
+# %%
 '''
     Federated Learning 
 '''
-
 def run_federated():
     print("fl start")
 
-    for i in range(number_round) :
+    for i in range(max_round) :
         #model = build_cnn_model()
         model = build_nn_model()
         global_weight = get_global_weight()
@@ -129,8 +169,8 @@ def run_federated():
 # %%
 def check_local_global_weight():
     global_weight = get_global_weight()
-    global before_local_weight
 
+    global before_local_weight
 
     if global_weight == before_local_weight:
         print("global weight == before local weight")
@@ -151,20 +191,6 @@ def check_local_global_weight():
 def train_local(model):
     print("train local")
 
-# %%
-
-def update_local_weight(weight):
-    print("update local weight start ")
-
-    local_weight_to_json = json.dumps(weight, cls=numpy_encoder.NumpyEncoder)
-    requests.put(ip_address, data=local_weight_to_json)
-
-    print("update local weight end")
-
-    '''
-        weight update는 실패가 없다고 가정 ... 
-    '''
-
 
 
 # %%
@@ -176,8 +202,11 @@ def task():
 
     td, tl = make_split_train_data_by_number(input_number, size=1000)
 
-    model.fit(td, tl, 10, 10, 0)
+    local_result = model.fit(td, tl, epochs=10, batch_size=10, verbose=0)
     test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
+
+    local_time = datetime.now()
+
     print("acc : {}, loss : {}".format(test_acc, test_loss))
 
     for i in range(10):
@@ -222,40 +251,19 @@ def test():
 
 
 # %%
-'''
-    get global_weight from server
-'''
-def get_global_weight():
-    result = requests.get(ip_address)
-    result_data = result.json()
-    global_weight = None
-    #   Server에 global weight가 저장되어 있지 않는 경우
-    if result_data is not None:
-        global_weight = []
-        for i in range(len(result_data)):
-            temp = np.array(result_data[i], dtype=np.float32)
-            global_weight.append(temp)
-
-    return global_weight
-
-# %%
-def make_split_train_data(size=600):
-    random_index = np.random.randint(0, high=len(train_labels), size=size)
-    s_train_image = []
-    s_train_label = []
-    for v in random_index:
-        s_train_image.append(train_images[v])
-        s_train_label.append(train_labels[v])
-    return np.array(s_train_image), np.array(s_train_label)
-
+def task_val():
+    print("task_val")
 
 
 # %%
 
 before_local_weight = []
 gw = []
-lw = []
 input_number = 0
+
+validation_acc_list = []
+validation_time_list = []
+
 
 if __name__ == "__main__":
 
@@ -269,17 +277,23 @@ if __name__ == "__main__":
 
     index = 0
     current_round = 0
-    number_round = 100
-    aws_url = "http://FlServer-env.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com/weight"
-    #ip_address = "http://127.0.0.1:8000/weight"
-    ip_address = aws_url
+    max_round = 100
 
+    #aws_url = "http://FlServer-env.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com/weight"
+    #ip_address = aws_url
+    ip_address = "http://127.0.0.1:8000/weight"
 
-    #before_local_weight = []
-    #get_global_weight()
+    start_time = datetime.now()
     task()
 
 
+    # validation 진행
+    if input_number == 0 :
+        task_val()
+
+    end_time = datetime.now()
+
+    print("time : {}".format(end_time - start_time))
 
 
 
