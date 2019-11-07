@@ -180,7 +180,8 @@ def task():
     test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
     print("acc : {}, loss : {}".format(test_acc, test_loss))
 
-    update_local_weight(model.get_weights())
+    for i in range(10):
+        update_local_weight(model.get_weights())
 
     '''
     if check_local_global_weight():
@@ -269,7 +270,9 @@ if __name__ == "__main__":
     index = 0
     current_round = 0
     number_round = 100
-    ip_address = "http://127.0.0.1:8000/weight"
+    aws_url = "http://FlServer-env.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com/weight"
+    #ip_address = "http://127.0.0.1:8000/weight"
+    ip_address = aws_url
 
 
     #before_local_weight = []
