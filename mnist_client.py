@@ -3,16 +3,14 @@
 import argparse
 import json
 import threading
+import time
 
 import numpy as np
 import requests
 import tensorflow as tf
-import pandas as pd
 from sklearn.metrics import confusion_matrix, accuracy_score
 
 import numpy_encoder
-import time
-import base64
 
 '''
     https://www.tensorflow.org/guide/gpu?hl=ko
@@ -59,7 +57,7 @@ def build_nn_model():
         tf.keras.layers.Dense(10, activation=tf.nn.softmax)
     ])
 
-    model.compile(optimizer=tf.keras.optimizers.SGD(learning_rate=0.001),
+    model.compile(optimizer=tf.keras.optimizers.SGD(learning_rate=0.1),
                   loss=tf.keras.losses.SparseCategoricalCrossentropy(),
                   metrics=['accuracy'])
 
@@ -131,7 +129,7 @@ def request_global_weight():
     if result_data is not None:
         global_weight = []
         for i in range(len(result_data)):
-            temp = np.array(result_data[i], dtype=np.float64)
+            temp = np.array(result_data[i], dtype=np.float32)
             global_weight.append(temp)
 
     print("request_global_weight end")
@@ -200,7 +198,7 @@ def train_validation_local(global_weight = None):
 
     local_start_time = time.time()
 
-    td, tl = make_split_train_data_by_number(input_number, size=600)
+    td, tl = make_split_train_data_by_number(input_number, size=1000)
 
     model = build_nn_model()
 
@@ -209,16 +207,15 @@ def train_validation_local(global_weight = None):
         #rint("set global weight ok")
         #print("set global round : {}".format(global_weight))
     model.fit(td, tl, epochs=5, batch_size=10, verbose=0)
-    test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
 
-    local_weight = model.get_weights()
+    test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
 
     validation_acc_list.append(test_acc)
     validation_loss_list.append(test_loss)
     validation_time_list.append(time.time() - local_start_time)
 
     print("train local end")
-    return local_weight
+    return model.get_weights()
 
 # %%
 def delay_compare_weight():
@@ -244,20 +241,21 @@ def request_current_round():
 
 # %%
 def validation(local_weight = []):
+    print("validation start")
     model = build_nn_model()
     model.set_weights(local_weight)
 
     result = model.predict(test_images)
     result = np.argmax(result, axis=1)
 
-    #print("test end")
 
-    #cm = confusion_matrix(test_labels, result)
-    #print(cm)
+
     acc = accuracy_score(test_labels, result)
     print("acc : {}".format(acc))
+
     validation_acc_list.append(acc)
     #validation_loss_list.append(test_loss)
+    print("validation end")
 
 # %%
 
@@ -287,7 +285,7 @@ def task():
 
     else:
         print("task retry")
-        # 10초 후 재 시도
+
         delay_compare_weight()
 
     print("end task")
@@ -339,7 +337,7 @@ if __name__ == "__main__":
 
     print("args : {}".format(input_number))
 
-    max_round = 500
+    max_round = 15
     global_round = 0
     delay_time = 15
     current_round = 0
