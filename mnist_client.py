@@ -59,7 +59,7 @@ def build_nn_model():
         tf.keras.layers.Dense(10, activation=tf.nn.softmax)
     ])
 
-    model.compile(optimizer=tf.keras.optimizers.SGD(),
+    model.compile(optimizer=tf.keras.optimizers.SGD(learning_rate=0.001),
                   loss=tf.keras.losses.SparseCategoricalCrossentropy(),
                   metrics=['accuracy'])
 
@@ -131,7 +131,7 @@ def request_global_weight():
     if result_data is not None:
         global_weight = []
         for i in range(len(result_data)):
-            temp = np.array(result_data[i], dtype=np.float32)
+            temp = np.array(result_data[i], dtype=np.float64)
             global_weight.append(temp)
 
     print("request_global_weight end")
@@ -200,7 +200,7 @@ def train_validation_local(global_weight = None):
 
     local_start_time = time.time()
 
-    td, tl = make_split_train_data_by_number(input_number, size=1000)
+    td, tl = make_split_train_data_by_number(input_number, size=600)
 
     model = build_nn_model()
 
@@ -339,9 +339,9 @@ if __name__ == "__main__":
 
     print("args : {}".format(input_number))
 
-    max_round = 100
+    max_round = 500
     global_round = 0
-    delay_time = 10
+    delay_time = 15
     current_round = 0
 
     #local_model = None
