@@ -57,7 +57,7 @@ def build_nn_model():
         tf.keras.layers.Dense(10, activation=tf.nn.softmax)
     ])
 
-    model.compile(optimizer=tf.keras.optimizers.SGD(learning_rate=0.1),
+    model.compile(optimizer=tf.keras.optimizers.SGD(),
                   loss=tf.keras.losses.SparseCategoricalCrossentropy(),
                   metrics=['accuracy'])
 
@@ -131,7 +131,7 @@ def request_global_weight():
         for i in range(len(result_data)):
             temp = np.array(result_data[i], dtype=np.float32)
             global_weight.append(temp)
-
+    #print("request_global_weight : {}".format(global_weight))
     print("request_global_weight end")
 
     return global_weight
@@ -198,15 +198,15 @@ def train_validation_local(global_weight = None):
 
     local_start_time = time.time()
 
-    td, tl = make_split_train_data_by_number(input_number, size=1000)
+    td, tl = make_split_train_data_by_number(input_number, size=600)
 
     model = build_nn_model()
 
     if global_weight is not None:
+        global_weight = np.array(global_weight)
         model.set_weights(global_weight)
-        #rint("set global weight ok")
-        #print("set global round : {}".format(global_weight))
-    model.fit(td, tl, epochs=5, batch_size=10, verbose=0)
+
+    model.fit(td, tl, epochs=2, batch_size=10, verbose=0)
 
     test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
 
@@ -280,13 +280,13 @@ def task():
         local_weight = train_validation_local(global_weight)
         #validation(local_weight)
         update_local_weight(local_weight)
-        delay_compare_weight()
+        #delay_compare_weight()
         current_round += 1
 
     else:
         print("task retry")
 
-        delay_compare_weight()
+        #delay_compare_weight()
 
     print("end task")
     print("====================")
@@ -337,7 +337,7 @@ if __name__ == "__main__":
 
     print("args : {}".format(input_number))
 
-    max_round = 15
+    max_round = 50
     global_round = 0
     delay_time = 15
     current_round = 0
