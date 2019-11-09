@@ -206,12 +206,16 @@ def train_validation_local(global_weight = None):
         global_weight = np.array(global_weight)
         model.set_weights(global_weight)
 
-    model.fit(td, tl, epochs=2, batch_size=10, verbose=0)
+    '''
+        epochs = 2 >>> acc 상승 속도 느림 
+        epochs = 5 >>>
+    '''
+    model.fit(td, tl, epochs=5, batch_size=10, verbose=0)
 
-    test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
+    #test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
 
-    validation_acc_list.append(test_acc)
-    validation_loss_list.append(test_loss)
+    #validation_acc_list.append(test_acc)
+    #validation_loss_list.append(test_loss)
     validation_time_list.append(time.time() - local_start_time)
 
     print("train local end")
@@ -242,20 +246,19 @@ def request_current_round():
 # %%
 def validation(local_weight = []):
     print("validation start")
-    model = build_nn_model()
-    model.set_weights(local_weight)
+    if local_weight is not None:
+        model = build_nn_model()
+        model.set_weights(local_weight)
 
-    result = model.predict(test_images)
-    result = np.argmax(result, axis=1)
+        result = model.predict(test_images)
+        result = np.argmax(result, axis=1)
 
+        acc = accuracy_score(test_labels, result)
+        print("acc : {}".format(acc))
 
-
-    acc = accuracy_score(test_labels, result)
-    print("acc : {}".format(acc))
-
-    validation_acc_list.append(acc)
-    #validation_loss_list.append(test_loss)
-    print("validation end")
+        validation_acc_list.append(acc)
+        #validation_loss_list.append(test_loss)
+        print("validation end")
 
 # %%
 
@@ -278,15 +281,17 @@ def task():
         # 다음 단계 진행
         global_weight = request_global_weight()
         local_weight = train_validation_local(global_weight)
-        #validation(local_weight)
+
+        if input_number == 0 :
+            validation(global_weight)
+
         update_local_weight(local_weight)
-        #delay_compare_weight()
+        delay_compare_weight()
         current_round += 1
 
     else:
         print("task retry")
-
-        #delay_compare_weight()
+        delay_compare_weight()
 
     print("end task")
     print("====================")
