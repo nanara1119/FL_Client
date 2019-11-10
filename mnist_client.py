@@ -342,7 +342,7 @@ if __name__ == "__main__":
 
     print("args : {}".format(input_number))
 
-    max_round = 50
+    max_round = 10
     global_round = 0
     delay_time = 15
     current_round = 0
