@@ -103,3 +103,5 @@ venv.bak/
 .idea
 # mypy
 .mypy_cache/
+
+FL_Client.zip
