@@ -105,3 +105,8 @@ venv.bak/
 .mypy_cache/
 
 FL_Client.zip
+
+
+/venv*
+/result
+

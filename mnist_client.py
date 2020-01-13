@@ -1,13 +1,14 @@
 # %%
 import argparse
 import json
+import os
 import threading
 import time
 
 import numpy as np
 import requests
 import tensorflow as tf
-from sklearn.metrics import confusion_matrix, accuracy_score
+from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
 
 import numpy_encoder
 
@@ -118,7 +119,8 @@ def make_split_train_data(size=600):
 '''
 def request_global_weight():
     print("request_global_weight start")
-    result = requests.get(ip_address)
+    #result = requests.get(ip_address)
+    result = requests.get("http://127.0.0.1:8000/weight")
     result_data = result.json()
 
     global_weight = None
@@ -189,7 +191,8 @@ def train_validation_local(global_weight = None):
 
     local_start_time = time.time()
 
-    td, tl = make_split_train_data_by_number(input_number, size=600)
+    #td, tl = make_split_train_data_by_number(input_number, size=600)
+    td, tl = make_split_train_data(size=600)
 
     model = build_nn_model()
 
@@ -216,7 +219,10 @@ def delay_compare_weight():
     if current_round is not max_round:
         threading.Timer(delay_time, task).start()
     else:
-        print_result()
+        '''
+        if input_number == 0:
+            print_result()
+        '''
 
 # %%
 def request_current_round():
@@ -226,21 +232,50 @@ def request_current_round():
     return result_data
 
 # %%
-def validation(local_weight = []):
+def validation(global_lound = 0, local_weight = []):
     print("validation start")
     if local_weight is not None:
         model = build_nn_model()
         model.set_weights(local_weight)
 
-        result = model.predict(test_images)
-        result = np.argmax(result, axis=1)
+        eval_loss, eval_acc = model.evaluate(test_images, test_labels, verbose=2)
 
-        acc = accuracy_score(test_labels, result)
-        print("acc : {}".format(acc))
+        #result = model.predict(test_images)
+        #result = np.argmax(result, axis=1)
 
-        validation_acc_list.append(acc)
+        #acc = accuracy_score(test_labels, result)
+        #print("acc : {}".format(acc))
+
+        #validation_acc_list.append(acc)
         #validation_loss_list.append(test_loss)
+
+        save_result(model, global_lound, eval_acc, eval_loss)
+
         print("validation end")
+
+
+# %%
+def save_result(model, global_rounds, global_acc, global_loss):
+    create_directory("result")
+    create_directory("result/model")
+
+    # 전체 h5 파일 용량 줄이기 위해서 임의로 80%의 성능 이상일 경우에만 파일 만듦
+    if global_acc >= 0.8 :
+        file_time = time.strftime("%Y%m%d-%H%M%S")
+        weight_save(model, "result/model/{}-{}.h5".format(file_time, global_rounds))
+
+    save_csv(global_rounds, global_acc, global_loss)
+
+def create_directory(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+def save_csv(round = 0, acc = 0.0, loss = 0.0):
+    with open("result/result.csv", "a+") as f:
+        f.write("{}, {}, {}\n".format(round, acc, loss))
+
+def weight_save(result_model, name):
+    result_model.save_weights(name)
 
 # %%
 
@@ -266,7 +301,7 @@ def task():
 
         #   동일한 global weight를 사용하므로, 0번 client에서만 validation 진행 함
         if input_number == 0 :
-            validation(global_weight)
+            validation(global_round, global_weight)
 
         update_local_weight(local_weight)
         delay_compare_weight()
@@ -287,11 +322,42 @@ def print_result():
     global validation_time_list
 
     print("====================")
-    print("number : {}".format(input_number))
+
+    load_weight()
+
+    #print("number : {}".format(input_number))
     #print("time : {}".format(time.time() - start_time))
-    print("acc list", validation_acc_list)
+    #print("acc list", validation_acc_list)
     #print("loss list", validation_loss_list)
     #print("time list", validation_time_list)
+
+
+# %%
+def load_weight():
+    file_time = time.strftime("%Y%m%d-%H%M%S")
+    model = build_nn_model()
+    model.load_weights("result/model/20200113-154712-10.h5".format(file_time, max_round))
+
+    test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=0)
+
+    print(test_acc, test_loss)
+
+    result = model.predict(test_images)
+    result = np.argmax(result, axis=1)
+
+    cm = confusion_matrix(test_labels, result)
+    print("cm : ", cm)
+    acc = accuracy_score(test_labels, result)
+    print("acc : {}".format(acc))
+    f1 = f1_score(test_labels, result, average=None)
+    f2 = f1_score(test_labels, result, average='micro')
+    f3 = f1_score(test_labels, result, average='macro')
+    f4 = f1_score(test_labels, result, average='weighted')
+    print("f1 : {}".format(f1))
+    print("f2 : {}".format(f2))
+    print("f3 : {}".format(f3))
+    print("f4 : {}".format(f4))
+
 
 # %%
 def test():
@@ -299,9 +365,9 @@ def test():
         콘솔 디버깅용
     '''
     print("test start")
-    global gw
     gw = request_global_weight()
 
+    '''
     if gw is not None:
         model = build_nn_model()
         model.set_weights(gw)
@@ -315,6 +381,8 @@ def test():
         print(cm)
         acc = accuracy_score(test_labels, result)
         print("acc : {}".format(acc))
+    '''
+    load_weight()
 
 # %%
 if __name__ == "__main__":
@@ -327,7 +395,7 @@ if __name__ == "__main__":
 
     print("args : {}".format(input_number))
 
-    max_round = 10
+    max_round = 2000
     global_round = 0
     delay_time = 5  #   5초마다 server&client 라운드 체크 진행 함
     current_round = 0
