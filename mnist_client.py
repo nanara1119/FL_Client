@@ -367,7 +367,7 @@ def test():
     print("test start")
     gw = request_global_weight()
 
-    '''
+
     if gw is not None:
         model = build_nn_model()
         model.set_weights(gw)
@@ -381,32 +381,79 @@ def test():
         print(cm)
         acc = accuracy_score(test_labels, result)
         print("acc : {}".format(acc))
-    '''
+
     load_weight()
+
+# %%
+from tensorflow.python.keras.callbacks import EarlyStopping
+
+def single_train():
+
+    early_stopping = EarlyStopping(patience=5)
+    model = build_nn_model()
+
+    model.fit(train_images, train_labels, epochs=1000, batch_size=32, verbose=1, validation_data=[test_images, test_labels], callbacks=[early_stopping])
+
+    #test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=1)
+
+    #test_loss, test_acc = model.history
+    print(model.history.history)
+    loss = model.history.history['loss']
+    acc = model.history.history['acc']
+    test_acc = model.history.history['val_acc']
+    test_loss = model.history.history['val_loss']
+
+    result = model.predict(test_images)
+    result = np.argmax(result, axis=1)
+
+    cm = confusion_matrix(test_labels, result)
+    print("cm : ", cm)
+    acc = accuracy_score(test_labels, result)
+    print("acc : {}".format(acc))
+    f1 = f1_score(test_labels, result, average=None)
+    f2 = f1_score(test_labels, result, average='micro')
+    f3 = f1_score(test_labels, result, average='macro')
+    f4 = f1_score(test_labels, result, average='weighted')
+    print("f1 : {}".format(f1))
+    print("f2 : {}".format(f2))
+    print("f3 : {}".format(f3))
+    print("f4 : {}".format(f4))
+
+single_train()
+
 
 # %%
 if __name__ == "__main__":
 
     parameter = argparse.ArgumentParser()
-    parameter.add_argument("number", default=0)
+    #parameter.add_argument("number", default=0)
+    parameter.add_argument("--number", default=0)
+    parameter.add_argument("--currentround", default=0)
+    parameter.add_argument("--maxround", default=2000)
     args = parameter.parse_args()
 
     input_number = int(args.number)
+    current_round = int(args.currentround)
+    max_round = int(args.maxround)
 
     print("args : {}".format(input_number))
 
-    max_round = 2000
     global_round = 0
     delay_time = 5  #   5초마다 server&client 라운드 체크 진행 함
-    current_round = 0
 
     validation_acc_list = []
     validation_loss_list = []
     validation_time_list = []
 
+    '''
     base_url = "http://127.0.0.1:8080/"
     ip_address = "http://127.0.0.1:8000/weight"
     request_round = "http://127.0.0.1:8000/round"
+    '''
+    base_url = "http://FlServer.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com"
+    ip_address = "http://FlServer.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com/weight"
+    request_round = "http://FlServer.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com/round"
+
 
     start_time = time.time()
     task()
