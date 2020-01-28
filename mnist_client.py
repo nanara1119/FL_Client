@@ -6,9 +6,11 @@ import threading
 import time
 
 import numpy as np
+from numpy.random import seed
 import requests
 import tensorflow as tf
 from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
+from tensorflow.python.keras.api import keras
 
 import numpy_encoder
 
@@ -18,8 +20,10 @@ import numpy_encoder
 '''
 gpus = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_virtual_device_configuration(gpus[0],
-                                                        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=256)])
+                                                        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=128)])
 
+seed(42)# keras seed fixing
+tf.random.set_random_seed(42)# tensorflow seed fixing
 # %%
 '''
     mnist load 및 (train, test), (image, label) 분리
@@ -119,8 +123,8 @@ def make_split_train_data(size=600):
 '''
 def request_global_weight():
     print("request_global_weight start")
-    #result = requests.get(ip_address)
-    result = requests.get("http://127.0.0.1:8000/weight")
+    result = requests.get(ip_address)
+    #result = requests.get("http://127.0.0.1:8000/weight")
     result_data = result.json()
 
     global_weight = None
@@ -191,8 +195,8 @@ def train_validation_local(global_weight = None):
 
     local_start_time = time.time()
 
-    #td, tl = make_split_train_data_by_number(input_number, size=600)
-    td, tl = make_split_train_data(size=600)
+    td, tl = make_split_train_data_by_number(input_number, size=600)
+    #td, tl = make_split_train_data(size=600)
 
     model = build_nn_model()
 
@@ -260,9 +264,10 @@ def save_result(model, global_rounds, global_acc, global_loss):
     create_directory("result/model")
 
     # 전체 h5 파일 용량 줄이기 위해서 임의로 80%의 성능 이상일 경우에만 파일 만듦
-    if global_acc >= 0.8 :
+    if global_acc >= 0.5 :
         file_time = time.strftime("%Y%m%d-%H%M%S")
-        weight_save(model, "result/model/{}-{}.h5".format(file_time, global_rounds))
+        model.save()
+        model.save_weights("result/model/{}-{}.h5".format(file_time, global_rounds))
 
     save_csv(global_rounds, global_acc, global_loss)
 
@@ -273,9 +278,6 @@ def create_directory(directory):
 def save_csv(round = 0, acc = 0.0, loss = 0.0):
     with open("result/result.csv", "a+") as f:
         f.write("{}, {}, {}\n".format(round, acc, loss))
-
-def weight_save(result_model, name):
-    result_model.save_weights(name)
 
 # %%
 
@@ -323,7 +325,7 @@ def print_result():
 
     print("====================")
 
-    load_weight()
+    #load_weight()
 
     #print("number : {}".format(input_number))
     #print("time : {}".format(time.time() - start_time))
@@ -333,10 +335,11 @@ def print_result():
 
 
 # %%
+
 def load_weight():
     file_time = time.strftime("%Y%m%d-%H%M%S")
     model = build_nn_model()
-    model.load_weights("result/model/20200113-154712-10.h5".format(file_time, max_round))
+    model.load_weights("result/model/20200128-212534-10.h5")
 
     test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=0)
 
@@ -358,6 +361,7 @@ def load_weight():
     print("f3 : {}".format(f3))
     print("f4 : {}".format(f4))
 
+load_weight()
 
 # %%
 def test():
@@ -419,7 +423,7 @@ def single_train():
     print("f3 : {}".format(f3))
     print("f4 : {}".format(f4))
 
-single_train()
+#single_train()
 
 
 # %%
@@ -445,14 +449,16 @@ if __name__ == "__main__":
     validation_loss_list = []
     validation_time_list = []
 
-    '''
-    base_url = "http://127.0.0.1:8080/"
+
+    base_url = "http://127.0.0.1:8000/"
     ip_address = "http://127.0.0.1:8000/weight"
     request_round = "http://127.0.0.1:8000/round"
+
     '''
     base_url = "http://FlServer.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com"
     ip_address = "http://FlServer.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com/weight"
     request_round = "http://FlServer.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com/round"
+    '''
 
 
     start_time = time.time()
