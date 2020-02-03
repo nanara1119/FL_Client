@@ -10,9 +10,8 @@ from numpy.random import seed
 import requests
 import tensorflow as tf
 from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
-from tensorflow.python.keras.api import keras
 
-import numpy_encoder
+from mnist import numpy_encoder
 
 '''
     https://www.tensorflow.org/guide/gpu?hl=ko
@@ -276,7 +275,7 @@ def create_directory(directory):
         os.makedirs(directory)
 
 def save_csv(round = 0, acc = 0.0, loss = 0.0):
-    with open("result/result.csv", "a+") as f:
+    with open("../result/result.csv", "a+") as f:
         f.write("{}, {}, {}\n".format(round, acc, loss))
 
 # %%

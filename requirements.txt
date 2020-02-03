@@ -24,3 +24,6 @@ termcolor==1.1.0
 urllib3==1.25.6
 Werkzeug==0.16.0
 wrapt==1.11.2
+pandas=0.20.3
+Keras==2.1.2
+scikit-learn==0.18.2
