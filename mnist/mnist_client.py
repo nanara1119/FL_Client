@@ -4,14 +4,15 @@ import json
 import os
 import threading
 import time
+from random import random
 
 import numpy as np
-from numpy.random import seed
 import requests
 import tensorflow as tf
+from sklearn import metrics
 from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
 
-from mnist import numpy_encoder
+import numpy_encoder
 
 '''
     https://www.tensorflow.org/guide/gpu?hl=ko
@@ -21,8 +22,8 @@ gpus = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_virtual_device_configuration(gpus[0],
                                                         [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=128)])
 
-seed(42)# keras seed fixing
-tf.random.set_random_seed(42)# tensorflow seed fixing
+
+#tf.random.set_random_seed(42)# tensorflow seed fixing
 # %%
 '''
     mnist load 및 (train, test), (image, label) 분리
@@ -92,7 +93,6 @@ def build_cnn_model():
 
 # %%
 def make_split_train_data_by_number(index_number, size=600):
-
     if index_number != -1 :
         random_index = np.random.randint(0, high=len(train_index_list[index_number]), size=size)
 
@@ -117,13 +117,19 @@ def make_split_train_data(size=600):
 
 
 # %%
+def split_data(input_number= 0):
+    temp_train, temp_labels = make_split_train_data_by_number(input_number, np.random.randint(1, 600))
+    print("split data : input number : {} : size : {}".format(input_number, len(temp_labels)))
+    return temp_train, temp_labels
+
+
+# %%
 '''
     request global_weight from server
 '''
 def request_global_weight():
     print("request_global_weight start")
     result = requests.get(ip_address)
-    #result = requests.get("http://127.0.0.1:8000/weight")
     result_data = result.json()
 
     global_weight = None
@@ -154,6 +160,7 @@ def update_local_weight(local_weight = []):
 
 
 # %%
+'''
 def compare_global_local_weight():
     print("compare_global_local_weight start")
 
@@ -161,11 +168,11 @@ def compare_global_local_weight():
     global global_weight
     global before_local_weight
 
-    '''
-        global weight와 before local weight 비교 함
-        같은 경우 일정 시간 이후 다시 check_local_global_weight 수행
-        다른 경우 train_local 수행
-    '''
+
+     #   global weight와 before local weight 비교 함
+     #   같은 경우 일정 시간 이후 다시 check_local_global_weight 수행
+     #   다른 경우 train_local 수행
+
     # 초기 상태이면 pass
     if global_weight is None or len(before_local_weight) == 0:
         #print("before_local_weight None")
@@ -187,6 +194,7 @@ def compare_global_local_weight():
 
     print("compare_global_local_weight end")
     return status
+'''
 
 # %%
 def train_validation_local(global_weight = None):
@@ -194,10 +202,13 @@ def train_validation_local(global_weight = None):
 
     local_start_time = time.time()
 
-    td, tl = make_split_train_data_by_number(input_number, size=600)
+    #td, tl = make_split_train_data_by_number(input_number, size=600)
     #td, tl = make_split_train_data(size=600)
 
     model = build_nn_model()
+
+    global split_train_images
+    global split_train_labels
 
     if global_weight is not None:
         global_weight = np.array(global_weight)
@@ -207,9 +218,9 @@ def train_validation_local(global_weight = None):
         epochs = 2 >>> acc 상승 속도 느림 
         epochs = 5 >>>
     '''
-    model.fit(td, tl, epochs=5, batch_size=10, verbose=0)
+    model.fit(split_train_images, split_train_labels, epochs=5, batch_size=10, verbose=0)
 
-    validation_time_list.append(time.time() - local_start_time)
+    #validation_time_list.append(time.time() - local_start_time)
 
     print("train local end")
     return model.get_weights()
@@ -219,7 +230,8 @@ def delay_compare_weight():
     '''
             일정 시간 이후 task 재 호출
     '''
-    if current_round is not max_round:
+    print("current_round : {}, max_round : {}".format(current_round, max_round))
+    if current_round < max_round:
         threading.Timer(delay_time, task).start()
     else:
         '''
@@ -241,7 +253,32 @@ def validation(global_lound = 0, local_weight = []):
         model = build_nn_model()
         model.set_weights(local_weight)
 
-        eval_loss, eval_acc = model.evaluate(test_images, test_labels, verbose=2)
+        #eval_loss, eval_acc = model.evaluate(test_images, test_labels, verbose=2)
+
+        result = model.predict(test_images)
+
+        auroc_ovr = metrics.roc_auc_score(test_labels, result, multi_class='ovr')
+        auroc_ovo = metrics.roc_auc_score(test_labels, result, multi_class='ovo')
+
+        result = np.argmax(result, axis=1)
+        cm = confusion_matrix(test_labels, result)
+        acc = accuracy_score(test_labels, result)
+
+        f1 = f1_score(test_labels, result, average=None)
+        f2 = f1_score(test_labels, result, average='micro')
+        f3 = f1_score(test_labels, result, average='macro')
+        f4 = f1_score(test_labels, result, average='weighted')
+
+        print("acc : {}".format(acc))
+        print("auroc ovr : {}".format(auroc_ovr))
+        print("auroc ovo : {}".format(auroc_ovo))
+        print("f1 None : {}".format(f1))
+        print("f2 micro : {}".format(f2))
+        print("f3 macro : {}".format(f3))
+        print("f4 weighted : {}".format(f4))
+
+        print("cm : \n", cm)
+
 
         #result = model.predict(test_images)
         #result = np.argmax(result, axis=1)
@@ -252,31 +289,31 @@ def validation(global_lound = 0, local_weight = []):
         #validation_acc_list.append(acc)
         #validation_loss_list.append(test_loss)
 
-        save_result(model, global_lound, eval_acc, eval_loss)
+        save_result(model, global_lound, global_acc=acc, f1_score=f2, auroc=auroc_ovo)
 
         print("validation end")
 
 
 # %%
-def save_result(model, global_rounds, global_acc, global_loss):
-    create_directory("result")
-    create_directory("result/model")
+def save_result(model, global_rounds, global_acc, f1_score, auroc):
+    test_name="FL4"
+    create_directory("{}".format(test_name))
+    create_directory("{}/model".format(test_name))
 
     # 전체 h5 파일 용량 줄이기 위해서 임의로 80%의 성능 이상일 경우에만 파일 만듦
-    if global_acc >= 0.5 :
+    if global_acc >= 0.8 :
         file_time = time.strftime("%Y%m%d-%H%M%S")
-        model.save()
-        model.save_weights("result/model/{}-{}.h5".format(file_time, global_rounds))
+        model.save_weights("{}/model/{}-{}-{}-{}.h5".format(test_name, file_time, global_rounds, global_acc, f1_score))
 
-    save_csv(global_rounds, global_acc, global_loss)
+    save_csv(test_name=test_name, round = global_rounds, acc = global_acc, f1_score=f1_score, auroc=auroc)
 
 def create_directory(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-def save_csv(round = 0, acc = 0.0, loss = 0.0):
-    with open("../result/result.csv", "a+") as f:
-        f.write("{}, {}, {}\n".format(round, acc, loss))
+def save_csv(test_name = "", round = 0, acc = 0.0, f1_score = 0, auroc = 0):
+    with open("{}/result.csv".format(test_name), "a+") as f:
+        f.write("{}, {}, {}\n".format(round, acc, f1_score, auroc))
 
 # %%
 
@@ -360,7 +397,7 @@ def load_weight():
     print("f3 : {}".format(f3))
     print("f4 : {}".format(f4))
 
-load_weight()
+#load_weight()
 
 # %%
 def test():
@@ -428,16 +465,24 @@ def single_train():
 # %%
 if __name__ == "__main__":
 
+
+
     parameter = argparse.ArgumentParser()
     #parameter.add_argument("number", default=0)
     parameter.add_argument("--number", default=0)
     parameter.add_argument("--currentround", default=0)
-    parameter.add_argument("--maxround", default=2000)
+    parameter.add_argument("--maxround", default=3000)
     args = parameter.parse_args()
 
     input_number = int(args.number)
     current_round = int(args.currentround)
     max_round = int(args.maxround)
+
+    # !!! seed 값 주면 재 실행할때마다 같은 값 나옴, 재현에 유리
+    # !!! seed 값 안주면 재 실행할때마다 다른 값 나옴,
+    #np.random.seed(42)
+    np.random.seed(input_number)
+    #np.random.seed(np.random.randint(42))
 
     print("args : {}".format(input_number))
 
@@ -448,17 +493,17 @@ if __name__ == "__main__":
     validation_loss_list = []
     validation_time_list = []
 
+    split_train_images, split_train_labels = split_data(input_number)
 
+    '''
     base_url = "http://127.0.0.1:8000/"
     ip_address = "http://127.0.0.1:8000/weight"
     request_round = "http://127.0.0.1:8000/round"
-
     '''
+
     base_url = "http://FlServer.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com"
     ip_address = "http://FlServer.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com/weight"
     request_round = "http://FlServer.d6mm7kyzdp.ap-northeast-2.elasticbeanstalk.com/round"
-    '''
-
 
     start_time = time.time()
     task()

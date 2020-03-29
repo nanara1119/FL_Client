@@ -1,7 +1,9 @@
 import tensorflow as tf
 import numpy as np
-from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
+from sklearn import metrics
+from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, roc_curve, auc
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import label_binarize
 
 mnist = tf.keras.datasets.mnist
 (train_images, train_labels), (test_images, test_labels) = mnist.load_data()
@@ -22,28 +24,38 @@ def build_nn_model():
 
 def validation():
     model = build_nn_model()
-    model.load_weights("result/model/20200118-152832-2879.h5")
-    model.fit()
+    #model.load_weights("C:/Project/FL_Client/result/model/20200118-152832-2879.h5")
+    #model.load_weights("C:/Project/FL_Client/result/model/20200201-170659-200-0.9702.h5")
+    #model.load_weights("C:/Project/FL_Client/result/model/20200316-190933-500-0.8901.h5")   # FL4-500-200
+    #model.load_weights("../FL4/model/20200318-212844-2651-0.8905-0.8905.h5")   # FL4-3000-600
+    model.load_weights("../result/model/20200118-085651-496.h5")   # FL3-500
+    #model.load_weights("result/model/20200118-152832-2879.h5")
+    #model.fit()
 
     test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=0)
 
-    print(test_acc, test_loss)
+    print("test acc : ", test_acc, " / test loss : ", test_loss)
 
     result = model.predict(test_images)
-    result = np.argmax(result, axis=1)
 
+    auroc = metrics.roc_auc_score(test_labels, result, multi_class='ovr')
+    print("auroc ovr : ", auroc)
+    auroc = metrics.roc_auc_score(test_labels, result, multi_class='ovo')
+    print("auroc ovo : ", auroc)
+
+    result = np.argmax(result, axis=1)
     cm = confusion_matrix(test_labels, result)
-    print("cm : ", cm)
+    print("cm : \n", cm)
     acc = accuracy_score(test_labels, result)
     print("acc : {}".format(acc))
     f1 = f1_score(test_labels, result, average=None)
     f2 = f1_score(test_labels, result, average='micro')
     f3 = f1_score(test_labels, result, average='macro')
     f4 = f1_score(test_labels, result, average='weighted')
-    print("f1 : {}".format(f1))
-    print("f2 : {}".format(f2))
-    print("f3 : {}".format(f3))
-    print("f4 : {}".format(f4))
+    print("f1 None : {}".format(f1))
+    print("f2 micro : {}".format(f2))
+    print("f3 macro : {}".format(f3))
+    print("f4 weighted : {}".format(f4))
 
 def show_confusion_matrix():
 
@@ -58,6 +70,19 @@ def show_confusion_matrix():
                [12, 13, 13, 17, 9, 26, 18, 15, 841, 10] ,
                [10, 8, 2, 7, 39, 6, 1, 47, 10, 879]])
 
+
+    cm_mnist_unbalance = np.array([[965,	0,	0,	1,	0,	1,	10,	1,	2,	0],
+                                   [0,	1118,	2,	2,	0,	0,	4,	2,	7,	0],
+                                   [15,	33,	870,	16,	13,	1,	25,	19,	40,	0],
+                                   [5,	5,	24,	895,	0,	32,	5,	26,	16,	2],
+                                   [6,	5,	10,	1,	914,	1,	13,	5,	6,	21],
+                                   [19,	14,	7,	51,	14,	705,	28,	10,	36,	8],
+                                   [14,	3,	6,	0,	6,	5,	919,	3,	2,	0],
+                                   [3,	17,	26,	2,	4,	0,	0,	963,	2,	11],
+                                   [15,	24,	19,	27,	10,	29,	18,	21,	803,	8],
+                                   [18,	13,	7,	11,	85,	7,	0,	106,	13,	749]])
+
+
     cm_mnist = np.array([[969, 0, 1, 0, 0, 2, 2, 2, 2, 2],
                           [0, 1121, 3, 1, 0, 1, 3, 2, 4, 0],
                           [4, 2, 1012, 2, 2, 0, 2, 4, 4, 0],
@@ -69,24 +94,31 @@ def show_confusion_matrix():
                           [6, 0, 3, 5, 6, 5, 4, 4, 938, 3],
                           [3, 2, 0, 6, 13, 2, 1, 7, 6, 969]])
 
-    cm_mnist_fl = np.array([[968, 0, 1, 1, 0, 3, 4, 1, 1, 1],
-                           [0, 1120, 2, 1, 0, 1, 5, 1, 5, 0],
-                           [6, 2, 998, 6, 3, 1, 4, 7, 5, 0],
-                           [0, 0, 6, 980, 0, 5, 1, 8, 7, 3],
-                           [2, 0, 4, 1, 948, 0, 7, 3, 2, 15],
-                           [5, 1, 0, 10, 1, 855, 10, 1, 6, 3],
+    cm_mnist_fl = np.array([[967, 0, 1, 1, 0, 3, 4, 1, 1, 2],
+                           [0, 1122, 2, 1, 0, 1, 5, 1, 3, 0],
+                           [5, 2, 998, 6, 3, 1, 4, 8, 5, 0],
+                           [0, 0, 6, 983, 0, 5, 1, 7, 5, 3],
+                           [2, 0, 3, 1, 950, 0, 5, 2, 2, 17],
+                           [5, 1, 0, 13, 1, 853, 9, 1, 6, 3],
                            [5, 3, 1, 1, 7, 5, 936, 0, 0, 0],
-                           [1, 9, 11, 3, 3, 1, 0, 991, 0, 9],
-                           [3, 2, 4, 6, 4, 7, 4, 4, 940, 0],
-                           [5, 5, 1, 7, 18, 3, 1, 7, 7, 955]])
+                           [1, 9, 10, 4, 3, 1, 0, 991, 0, 9],
+                           [3, 2, 5, 7, 5, 7, 3, 4, 938, 0],
+                           [4, 5, 1, 7, 17, 2, 1, 5, 3, 964]])
 
 
+    mimic_benchmark = np.array([[2786, 76],
+                                [253, 121]])
 
-    plot_confusion_matrix(cm_mnist_fl, normalize=False, target_names=['0','1','2','3','4','5','6','7','8','9'], title="")
+    mimic_fl_1000 = np.array([[2819, 43],
+                                [288, 86]])
+
+    mimic_fl_3000 = np.array([[2789,73], [256, 118]])
+
+    plot_confusion_matrix(cm_mnist_unbalance, normalize=False)
 
 def plot_confusion_matrix(cm,
-                          target_names,
-                          title='Confusion matrix',
+                          target_names=[],
+                          title='',
                           cmap=None,
                           normalize=True):
     """
@@ -131,15 +163,17 @@ def plot_confusion_matrix(cm,
     if cmap is None:
         cmap = plt.get_cmap('Blues')
 
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(4, 4))
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
-    plt.title(title)
-    plt.colorbar()
+    #plt.title(title)
+    #plt.colorbar()
+
 
     if target_names is not None:
         tick_marks = np.arange(len(target_names))
         plt.xticks(tick_marks, target_names, rotation=45)
         plt.yticks(tick_marks, target_names)
+
 
     if normalize:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
@@ -150,19 +184,21 @@ def plot_confusion_matrix(cm,
         if normalize:
             plt.text(j, i, "{:0.4f}".format(cm[i, j]),
                      horizontalalignment="center",
-                     color="white" if cm[i, j] > thresh else "black")
+                     color="white" if cm[i, j] > thresh else "black",
+                     fontsize=12)
         else:
             plt.text(j, i, "{:,}".format(cm[i, j]),
                      horizontalalignment="center",
-                     color="white" if cm[i, j] > thresh else "black")
+                     color="white" if cm[i, j] > thresh else "black",
+                     )
 
 
-    plt.tight_layout()
-    plt.ylabel('True label')
+    #plt.tight_layout()
+    #plt.ylabel('True label')
     #plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
-    plt.xlabel('Predicted label')
+    #plt.xlabel('Predicted label')
     plt.show()
 
 if __name__ == "__main__":
-    #validation()
-    show_confusion_matrix()
+    validation()
+    #show_confusion_matrix()
