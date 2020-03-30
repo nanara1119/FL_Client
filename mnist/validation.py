@@ -1,7 +1,9 @@
 import tensorflow as tf
 import numpy as np
+from scipy.stats import stats
 from sklearn import metrics
 from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, roc_curve, auc
+import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import label_binarize
 
@@ -21,6 +23,203 @@ def build_nn_model():
                   metrics=['accuracy'])
 
     return model
+
+
+def bootstrapping():
+    model = build_nn_model()
+    #model.load_weights("../result/model/20200118-085651-496.h5")   sample
+    model.load_weights("E:/experiments/MNIST_FL_1/model/20200317-171952-491-0.9456.h5")
+    print("==> bootstrapping start")
+
+    n_bootstraps = 10000
+    rng_seed = 3033  # control reproducibility
+
+    bootstrapped_auroc = []
+    bootstrapped_auprc = []
+    bootstrapped_sen = []
+    bootstrapped_spe = []
+    bootstrapped_bac = []
+    bootstrapped_f1 = []
+    bootstrapped_pre = []
+    bootstrapped_NLR = []
+    bootstrapped_PLR = []
+    final = {}
+
+    result = model.predict(test_images)
+    auroc = metrics.roc_auc_score(test_labels, result, multi_class='ovr')
+    print("auroc ovr : ", auroc)
+    auroc_ovo = metrics.roc_auc_score(test_labels, result, multi_class='ovo')
+    print("auroc ovo : ", auroc_ovo)
+
+    result = np.argmax(result, axis=1)
+    auprc = metrics.auc(test_labels, result)
+    print("auprc : ", auprc)
+
+
+
+
+
+    '''
+    fpr = dict()
+    tpr = dict()
+
+    for i in range(10):
+        fpr[i], tpr[i], _ = roc_curve(test_labels[:, i], result[:, i])
+
+    print(fpr, tpr)
+    
+    fpr, tpr, thresholds = metrics.roc_curve(test_labels, result)
+    #roc_auc = metrics.auc(fpr, tpr)
+    '''
+    (precisions, recalls, thresholds) = metrics.precision_recall_curve(test_labels, result)
+
+    minpse = np.max([min(x, y) for (x, y) in zip(precisions, recalls)])
+
+    result = np.argmax(result, axis=1)
+
+    cf = metrics.confusion_matrix(test_labels, result)
+    print(cf)
+    cf = cf.astype(np.float32)
+
+    acc = (cf[0][0] + cf[1][1]) / np.sum(cf)
+    prec0 = cf[0][0] / (cf[0][0] + cf[1][0])
+    prec1 = cf[1][1] / (cf[1][1] + cf[0][1])
+    rec0 = cf[0][0] / (cf[0][0] + cf[0][1])
+    rec1 = cf[1][1] / (cf[1][1] + cf[1][0])
+
+    t = pd.concat([pd.DataFrame(thresholds), pd.DataFrame(tpr), pd.DataFrame(1-fpr), pd.DataFrame(((1-fpr+tpr)/2))], axis=1)
+    t.columns = ['threshold', 'sensitivity', 'specificity', 'bac']
+    t_ = t.iloc[np.min(np.where(t['bac'] == max(t['bac']))), :]
+    y_pred_ = (result >= t_['threshold']).astype(bool)
+
+    cm_ = metrics.confusion_matrix(test_labels, result)
+    tp = cm_[1, 1]
+    fn = cm_[1, 0]
+    fp = cm_[0, 1]
+    tn = cm_[0, 0]
+
+    bac = t_['bac']  # balanced accuracy
+    sensitivity = t_['sensitivity']  # sensitivity
+    specificity = t_['specificity']  # specificity
+    precision = tp / (tp + fp)  # precision
+    f1 = 2 * ((sensitivity * precision) / (sensitivity + precision))  # f1 score
+    plr = sensitivity / (1 - specificity)  # PLR
+    nlr = (1 - sensitivity) / specificity  # NLR
+
+    rng = np.random.RandomState(rng_seed)
+
+    y_true = np.array(test_labels)
+    for j in range(n_bootstraps):
+        indices = rng.random_integers(0, len(result)-1, len(result))
+
+        if len(np.unique(y_true[indices])) < 2:
+            continue
+
+        auroc_ = metrics.roc_auc_score(y_true[indices], result[indices])
+        precision_, recall_, thresholds_ = metrics.precision_recall_curve(y_true[indices], result[indices])
+        auprc_ = metrics.auc(recall_, precision_)
+        CM = metrics.confusion_matrix(np.array(y_true)[indices], result.argmax(axis=1))
+        TP = CM[1, 1]
+        FN = CM[1, 0]
+        FP = CM[0, 1]
+        TN = CM[0, 0]
+
+        TPV = TP / (TP + FN)  # sensitivity
+        TNV = TN / (TN + FP)  # specificity
+        PPV = TP / (TP + FP)  # precision
+        BAAC = (TPV + TNV) / 2  # balanced accuracy
+        F1 = 2 * ((PPV * TPV) / (PPV + TPV))  # f1 score
+        PLR = TPV / (1 - TNV)  # LR+
+        NLR = (1 - TPV) / TNV  # LR-
+
+        bootstrapped_auroc.append(auroc_)  # AUROC
+        bootstrapped_auprc.append(auprc_)  # AUPRC
+        bootstrapped_sen.append(TPV)  # Sensitivity
+        bootstrapped_spe.append(TNV)  # Specificity
+        bootstrapped_bac.append(BAAC)  # Balanced Accuracy
+        bootstrapped_f1.append(F1)  # F1 score
+        bootstrapped_pre.append(PPV)  # Precision
+        bootstrapped_NLR.append(NLR)  # Negative Likelihood Ratio
+        bootstrapped_PLR.append(PLR)  # positive Likelihood Ratio
+
+    sorted_auroc = np.array(bootstrapped_auroc)
+    sorted_auroc.sort()
+    sorted_auprc = np.array(bootstrapped_auprc)
+    sorted_auprc.sort()
+    sorted_sen = np.array(bootstrapped_sen)
+    sorted_sen.sort()
+    sorted_spe = np.array(bootstrapped_spe)
+    sorted_spe.sort()
+    sorted_bac = np.array(bootstrapped_bac)
+    sorted_bac.sort()
+    sorted_f1 = np.array(bootstrapped_f1)
+    sorted_f1.sort()
+    sorted_pre = np.array(bootstrapped_pre)
+    sorted_pre.sort()
+    sorted_NLR = np.array(bootstrapped_NLR)
+    sorted_NLR.sort()
+    sorted_PLR = np.array(bootstrapped_PLR)
+    sorted_PLR.sort()
+
+    auroc_lower = round(sorted_auroc[int(0.025 * len(sorted_auroc))], 4)
+    auroc_upper = round(sorted_auroc[int(0.975 * len(sorted_auroc))], 4)
+    auprc_lower = round(sorted_auprc[int(0.025 * len(sorted_auprc))], 4)
+    auprc_upper = round(sorted_auprc[int(0.975 * len(sorted_auprc))], 4)
+    sen_lower = round(sorted_sen[int(0.025 * len(sorted_sen))], 4)
+    sen_upper = round(sorted_sen[int(0.975 * len(sorted_sen))], 4)
+    spe_lower = round(sorted_spe[int(0.025 * len(sorted_spe))], 4)
+    spe_upper = round(sorted_spe[int(0.975 * len(sorted_spe))], 4)
+    bac_lower = round(sorted_bac[int(0.025 * len(sorted_bac))], 4)
+    bac_upper = round(sorted_bac[int(0.975 * len(sorted_bac))], 4)
+    f1_lower = round(sorted_f1[int(0.025 * len(sorted_f1))], 4)
+    f1_upper = round(sorted_f1[int(0.975 * len(sorted_f1))], 4)
+    pre_lower = round(sorted_pre[int(0.025 * len(sorted_pre))], 4)
+    pre_upper = round(sorted_pre[int(0.975 * len(sorted_pre))], 4)
+    NLR_lower = round(sorted_NLR[int(0.025 * len(sorted_NLR))], 4)
+    NLR_upper = round(sorted_NLR[int(0.975 * len(sorted_NLR))], 4)
+    PLR_lower = round(sorted_PLR[int(0.025 * len(sorted_PLR))], 4)
+    PLR_upper = round(sorted_PLR[int(0.975 * len(sorted_PLR))], 4)
+
+    auroc_true_ci = str(round(auroc, 4)) + " (" + str(auroc_lower) + ", " + str(auroc_upper) + ")"
+    auprc_true_ci = str(round(auprc, 4)) + " (" + str(auprc_lower) + ", " + str(auprc_upper) + ")"
+    sen_true_ci = str(round(sensitivity, 4)) + " (" + str(sen_lower) + ", " + str(sen_upper) + ")"
+    spe_true_ci = str(round(specificity, 4)) + " (" + str(spe_lower) + ", " + str(spe_upper) + ")"
+    bac_true_ci = str(round(bac, 4)) + " (" + str(bac_lower) + ", " + str(bac_upper) + ")"
+    f1_true_ci = str(round(f1, 4)) + " (" + str(f1_lower) + ", " + str(f1_upper) + ")"
+    pre_true_ci = str(round(precision, 4)) + " (" + str(pre_lower) + ", " + str(pre_upper) + ")"
+    NLR_true_ci = str(round(nlr, 4)) + " (" + str(NLR_lower) + ", " + str(NLR_upper) + ")"
+    PLR_true_ci = str(round(plr, 4)) + " (" + str(PLR_lower) + ", " + str(PLR_upper) + ")"
+    #
+    col_n = ['thresholds', 'sensitivity', 'specificity', 'precision', 'bacc', 'f1', 'PLR', 'NLR', 'AUROC',
+             'AUPRC']
+
+    final = {"thresholds": round(t_['threshold'], 4),
+                "sensitivity": sen_true_ci, "specificity": spe_true_ci,
+                "precision": pre_true_ci, "bacc": bac_true_ci,
+                "f1": f1_true_ci, "PLR": PLR_true_ci, "NLR": NLR_true_ci,
+                "AUROC": auroc_true_ci, "AUPRC": auprc_true_ci}
+    final = pd.DataFrame(final, index=[0])
+    #final1 = pd.DataFrame(final)
+    final = final.reindex(columns=col_n)
+
+
+    total_item = {"thresholds": round(t_['threshold'], 4),
+                "sensitivity": sorted_sen, "specificity": sorted_spe,
+                "precision": sorted_pre, "bacc": sorted_bac,
+                "f1": sorted_f1, "PLR": sorted_PLR, "NLR": sorted_NLR,
+                "AUROC": sorted_auroc, "AUPRC": sorted_auprc}
+    total_pd = pd.DataFrame.from_dict(total_item, orient='columns')
+
+    print(total_pd)
+
+    final2 = pd.DataFrame.append(final, total_pd)
+    final2.to_csv("fl_1_bootstrapping.csv", mode="w")
+
+    print("==> bootstrapping end")
+
+    t_test_result = stats.ttest_1samp(sorted_auroc, 0.999)
+
+    print("t-test : ", t_test_result)
 
 def validation():
     model = build_nn_model()
@@ -200,5 +399,6 @@ def plot_confusion_matrix(cm,
     plt.show()
 
 if __name__ == "__main__":
-    validation()
+    #validation()
     #show_confusion_matrix()
+    bootstrapping()
