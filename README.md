@@ -9,4 +9,13 @@
 
 # run
 1. cmd - .\venv\Scripts\activate<br>
-2. test.bat 내용 붙여넣기 
+2. start command each client
+python .\mnist_client.py --number 0
+python .\mnist_client.py --number 1
+python .\mnist_client.py --number 2
+python .\mnist_client.py --number 3
+python .\mnist_client.py --number 4
+python .\mnist_client.py --number 5
+python .\mnist_client.py --number 6
+python .\mnist_client.py --number 7
+python .\mnist_client.py --number 8
