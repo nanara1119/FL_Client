@@ -35,7 +35,7 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
+# Unit t_test / coverage reports
 htmlcov/
 .tox/
 .coverage
@@ -108,8 +108,10 @@ FL_Client.zip
 
 
 /venv*
+/FL4
 /result
 
-/mimic
+/mimic/bootstrapping.py
+/mnist/server_url.py
 
-/FL4
+
