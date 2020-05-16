@@ -7,7 +7,7 @@
 4. .\venv\Scripts\activate<br>
 5. pip install -r requirements.txt<br>
 
-# run
+# MNIST run
 1. cmd - .\venv\Scripts\activate<br>
 2. start command each client<br>
 ``` 
@@ -21,3 +21,12 @@ python .\mnist_client.py --number 6
 python .\mnist_client.py --number 7
 python .\mnist_client.py --number 8
 ```
+
+# MIMIC-III
+refer to mimic3-benchmarks<br>
+<l> https://github.com/YerevaNN/mimic3-benchmarks </l>
+
+replace /mimic3models/in_hospital_mortality/main
+
+
+
