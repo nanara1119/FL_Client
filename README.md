@@ -9,8 +9,8 @@
 
 # run
 1. cmd - .\venv\Scripts\activate<br>
-2. start command each client
-'''
+2. start command each client</br>
+'''python 
 python .\mnist_client.py --number 0</br>
 python .\mnist_client.py --number 1</br>
 python .\mnist_client.py --number 2</br>
