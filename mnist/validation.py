@@ -1,11 +1,15 @@
+import random
+
 import tensorflow as tf
 import numpy as np
 from scipy.stats import stats
 from sklearn import metrics
-from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, roc_curve, auc
+from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, roc_curve, auc, precision_recall_fscore_support, \
+    classification_report, average_precision_score, recall_score, precision_recall_curve
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import label_binarize
+import csv
 
 mnist = tf.keras.datasets.mnist
 (train_images, train_labels), (test_images, test_labels) = mnist.load_data()
@@ -24,11 +28,152 @@ def build_nn_model():
 
     return model
 
+def mnist_bootstrapping():
+    model = build_nn_model()
+    # model.load_weights("../result/model/20200118-085651-496.h5")   sample
+    model.load_weights("E:/experiments/MNIST_FL_1/model/20200317-171952-491-0.9456.h5")
+    # model.load_weights("E:/experiments/MNIST_BASE/model/20200427-114037-0-0.981-0.9810000000000001.h5")
+    print("==> bootstrapping start")
+
+    n_bootstraps = 1000
+    sample_size = 1000
+    np.random.seed(3033)
+    #rng_seed = 3033  # control reproducibility
+
+    result = model.predict(test_images)
+    auroc = metrics.roc_auc_score(test_labels, result, multi_class='ovr')
+    print("auroc ovr : ", auroc)
+    auroc_ovo = metrics.roc_auc_score(test_labels, result, multi_class='ovo')
+    print("auroc ovo : ", auroc_ovo)
+
+    scores = precision_recall_fscore_support(test_labels, np.argmax(result, axis=1), average=None)
+    #print(scores)
+    report = classification_report(test_labels, np.argmax(result, axis=1), digits=3)
+    print(report)
+
+    total_precision = []
+    total_recall = []
+    total_f1 = []
+
+    precision = []
+    recall = []
+    f1 = []
+
+    total = []
+
+    result = np.argmax(result, axis= 1)
+    y_true = np.array(test_labels)
+
+    '''
+    a = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    b = [1, 3, 5, 7, 9]
+
+    result = []
+    for i in b:
+        result.append(a[i])
+    print(result)
+    '''
+
+    ''' running 1000 bootstrapping '''
+    for j in range(n_bootstraps):
+        ''' number of sampling -> 10 percent of original '''
+        indices = np.random.random_integers(0, len(result) - 1, sample_size)
+
+
+        if len(np.unique(y_true[indices])) < 2:
+            continue
+
+        sub_labels = []
+        sub_result = []
+
+        #print(indices, len(indices))
+        for i in indices:
+            sub_labels.append(test_labels[i])
+            sub_result.append(result[i])
+
+        '''
+        [0][x] - precision
+        [1][x] - recall
+        [2][x] - f1-score
+        [3][x] = support
+        '''
+
+        s_scores = precision_recall_fscore_support(sub_labels, sub_result, labels=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], average=None)
+        #s_report = classification_report(sub_labels, sub_result, labels=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], digits=3)
+
+        precision.append(np.array(s_scores[0]))
+        recall.append(np.array(s_scores[1]))
+        f1.append(np.array(s_scores[2]))
+
+
+        #print("precision :", precision)
+        #print(np.average(scores[0]), np.average(scores[1]), np.average(scores[2]))
+        total_precision.append(np.average(s_scores[0]))
+        total_recall.append(np.average(s_scores[1]))
+        total_f1.append(np.average(s_scores[2]))
+
+    total_precision.sort()
+    total_recall.sort()
+    total_f1.sort()
+
+    precision = np.array(precision)
+    precision[precision == .0] = np.nan
+    recall = np.array(recall)
+    recall[recall == .0] = np.nan
+    f1 = np.array(f1)
+    f1[f1 == .0] = np.nan
+
+    #print("\nprecision")
+    #print(precision)
+    #print("==========")
+
+
+    for i in range(10):
+        pre = precision[:, i]
+        pre.sort()
+        rec = recall[:, i]
+        rec.sort()
+        f = f1[:, i]
+        f.sort()
+
+        pre = np.round(pre[int(len(pre) * 0.025) : int(len(pre) * 0.975)], 3)
+        rec = np.round(rec[int(len(rec) * 0.025) : int(len(rec) * 0.975)], 3)
+        f = np.round(pre[int(len(f) * 0.025) : int(len(f) * 0.975)], 3)
+
+        #print(i , " : ", np.nanmean(pre).round(3), " : ", np.nanmean(rec).round(3), " : ", np.nanmean(f).round(3))
+        print(i ,
+              " : ", "{0} ({1}, {2})".format(np.round(np.nanmean(pre), 3), round(pre[0], 3), round(pre[-1], 3)),
+              " : ", "{0} ({1}, {2})".format(np.round(np.nanmean(rec), 3), round(rec[0], 3), round(rec[-1], 3)),
+              " : ", "{0} ({1}, {2})".format(np.round(np.nanmean(f), 3), round(f[0], 3), round(f[-1], 3)))
+
+        item = [i,
+                "{0} ({1}, {2})".format(np.round(np.nanmean(pre), 3), round(pre[0], 3), round(pre[-1], 3)),
+                "{0} ({1}, {2})".format(np.round(np.nanmean(rec), 3), round(rec[0], 3), round(rec[-1], 3)),
+                "{0} ({1}, {2})".format(np.round(np.nanmean(f), 3), round(f[0], 3), round(f[-1], 3))]
+
+        total.append(item)
+
+    ''' CI '''
+    total_precision = np.round(total_precision[int(len(total_precision) * 0.025) : int(len(total_precision) * 0.975)], 3)
+    total_recall = np.round(total_recall[int(len(total_recall) * .025) : int(len(total_recall) * .975)], 3)
+    total_f1 = np.round(total_f1[int(len(total_f1) * .025) : int(len(total_f1) * .975)], 3)
+
+    with open("mnist_1_bootstrapping.csv", "w", newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["", "precision", "recall", "f1-score"])
+        writer.writerow(["",
+                         "{0} ({1}, {2})".format(np.round(np.average(scores[0]), 3), total_precision[0], total_precision[-1]),
+                         "{0} ({1}, {2})".format(np.round(np.average(scores[1]), 3), total_recall[0], total_recall[-1]),
+                         "{0} ({1}, {2})".format(np.round(np.average(scores[2]), 3), total_f1[0], total_f1[-1])])
+        for i in total:
+            writer.writerow(i)
+
 
 def bootstrapping():
     model = build_nn_model()
     #model.load_weights("../result/model/20200118-085651-496.h5")   sample
     model.load_weights("E:/experiments/MNIST_FL_1/model/20200317-171952-491-0.9456.h5")
+    #model.load_weights("E:/experiments/MNIST_BASE/model/20200427-114037-0-0.981-0.9810000000000001.h5")
     print("==> bootstrapping start")
 
     n_bootstraps = 10000
@@ -55,23 +200,23 @@ def bootstrapping():
     auprc = metrics.auc(test_labels, result)
     print("auprc : ", auprc)
 
-
-
-
-
-    '''
     fpr = dict()
     tpr = dict()
 
+    '''
     for i in range(10):
         fpr[i], tpr[i], _ = roc_curve(test_labels[:, i], result[:, i])
 
     print(fpr, tpr)
-    
-    fpr, tpr, thresholds = metrics.roc_curve(test_labels, result)
-    #roc_auc = metrics.auc(fpr, tpr)
     '''
+    '''
+    fpr, tpr, thresholds = metrics.roc_curve(test_labels, result)
+    roc_auc = metrics.auc(fpr, tpr)
+    print("roc auc ", roc_auc)
+
     (precisions, recalls, thresholds) = metrics.precision_recall_curve(test_labels, result)
+
+    print(precisions, recalls)
 
     minpse = np.max([min(x, y) for (x, y) in zip(precisions, recalls)])
 
@@ -80,6 +225,7 @@ def bootstrapping():
     cf = metrics.confusion_matrix(test_labels, result)
     print(cf)
     cf = cf.astype(np.float32)
+
 
     acc = (cf[0][0] + cf[1][1]) / np.sum(cf)
     prec0 = cf[0][0] / (cf[0][0] + cf[1][0])
@@ -91,6 +237,7 @@ def bootstrapping():
     t.columns = ['threshold', 'sensitivity', 'specificity', 'bac']
     t_ = t.iloc[np.min(np.where(t['bac'] == max(t['bac']))), :]
     y_pred_ = (result >= t_['threshold']).astype(bool)
+
 
     cm_ = metrics.confusion_matrix(test_labels, result)
     tp = cm_[1, 1]
@@ -105,7 +252,7 @@ def bootstrapping():
     f1 = 2 * ((sensitivity * precision) / (sensitivity + precision))  # f1 score
     plr = sensitivity / (1 - specificity)  # PLR
     nlr = (1 - sensitivity) / specificity  # NLR
-
+    '''
     rng = np.random.RandomState(rng_seed)
 
     y_true = np.array(test_labels)
@@ -213,7 +360,7 @@ def bootstrapping():
     print(total_pd)
 
     final2 = pd.DataFrame.append(final, total_pd)
-    final2.to_csv("fl_1_bootstrapping.csv", mode="w")
+    final2.to_csv("mnist_cml_bootstrapping.csv", mode="w")
 
     print("==> bootstrapping end")
 
@@ -227,8 +374,8 @@ def validation():
     #model.load_weights("C:/Project/FL_Client/result/model/20200201-170659-200-0.9702.h5")
     #model.load_weights("C:/Project/FL_Client/result/model/20200316-190933-500-0.8901.h5")   # FL4-500-200
     #model.load_weights("../FL4/model/20200318-212844-2651-0.8905-0.8905.h5")   # FL4-3000-600
-    model.load_weights("../result/model/20200118-085651-496.h5")   # FL3-500
-    #model.load_weights("result/model/20200118-152832-2879.h5")
+    #model.load_weights("../result/model/20200118-085651-496.h5")   # FL3-500
+    model.load_weights("result/model/20200118-152832-2879.h5")
     #model.fit()
 
     test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=0)
@@ -398,7 +545,9 @@ def plot_confusion_matrix(cm,
     #plt.xlabel('Predicted label')
     plt.show()
 
+
 if __name__ == "__main__":
     #validation()
     #show_confusion_matrix()
-    bootstrapping()
+    #bootstrapping()
+    mnist_bootstrapping()
