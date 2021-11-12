@@ -47,17 +47,19 @@ class FL_Base:
     def task(self):
         """task sequence
 
-        1. global round request
+        1. request global round
 
         2. compare global round and local round
 
-        3. if the round same, run validation
+        3. request global weight
 
-        4. start local training
+        4. if the round same & exist global weight > run validation
 
-        5. update local weight to aggregation server
+        5. start local training
 
-        6. delay, do next round
+        6. update local weight to aggregation server
+
+        7. delay, do next round
 
         """
         pass
