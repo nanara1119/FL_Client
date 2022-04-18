@@ -38,5 +38,8 @@ replace /mimic3models/in_hospital_mortality/main
 refer to "**Cardiologist-level arrhythmia detection and classification in ambulatory electrocardiograms using a deep neural network"**<br>
 https://www.nature.com/articles/s41591-018-0268-3?source=techstories.org<br>
 
+<l> https://github.com/awni/ecg </l>
+ 
+
 
 
